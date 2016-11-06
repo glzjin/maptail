@@ -106,7 +106,7 @@ var mysql = require('mysql');
 		port: config.mysql_port
 	});
     conn.connect();
-	conn.query("select `ip`,`nodeid` from `alive_ip` where `datetime`>UNIX_TIMESTAMP()-10", function (err, rows) {
+	conn.query("select `ip`,`nodeid` from `blockip` where `datetime`>UNIX_TIMESTAMP()-10", function (err, rows) {
 		if (err) console.log(err);
 		for (var i in rows) {
 			conn.query("select `name` from `ss_node` where `id`=" + rows[i]['nodeid'], function(line){return function (err_node, rows_node) {
