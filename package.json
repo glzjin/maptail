@@ -16,7 +16,8 @@
   "dependencies": {
     "express": "~2.5.8",    
     "simpl": "~0.4.0",
-    "geoip-lite-with-city-data": "~1.0.5"
+    "geoip-lite-with-city-data": "~1.0.5",
+    "mysql": ""
   },
   "devDependencies": {
     "colors": "*"

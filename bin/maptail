@@ -7,6 +7,11 @@ var help = '\nusage: maptail [-f filename] [-h host] [-p port] [options...]\n\n'
          + '  --buffer <ms> .......... buffer in ms [250]'         
          + '  --fps <fps> ............ how fast do the markers age [60]'
          + '  --quiet ................ don\'t proxy to stdout\n'
+         + '  --mysql_host ................ mysql hostname\n'
+         + '  --mysql_username ................ mysql username\n'
+         + '  --mysql_password ................ mysql password\n'
+         + '  --mysql_database ................ mysql database\n'
+         + '  --mysql_port ................ mysql port\n'
 
 var spawn = require('child_process').spawn
 var maptail = require('../')
@@ -15,6 +20,11 @@ var express = require('express')
 var config = {
   host: 'localhost'
 , port: 8080
+, mysql_port: 3306
+, mysql_username: ''
+, mysql_password: ''
+, mysql_host: ''
+, mysql_database: ''
 }
 
 var arg, args = process.argv.slice(2), spawnArgs = []
@@ -28,6 +38,11 @@ while (arg = args.shift()) {
   else if (arg == '--max-age' || arg == '--maxage') maptail.config.maxAge = parseInt(args.shift(), 10)
   else if (arg == '--fps') maptail.config.fps = 1000 / parseInt(args.shift(), 10)
   else if (arg == '--buffer') maptail.config.bufferTime = parseInt(args.shift(), 10)
+  else if (arg == '--mysql_host') config.mysql_host = args.shift()
+  else if (arg == '--mysql_database') config.mysql_database = args.shift()
+  else if (arg == '--mysql_username') config.mysql_username = args.shift()
+  else if (arg == '--mysql_password') config.mysql_password = args.shift()
+  else if (arg == '--mysql_port') config.mysql_port = parseInt(args.shift(), 10)
   else spawnArgs.push(arg)
 }
 
@@ -41,7 +56,7 @@ app.listen(config.port, config.host, function () {
   if (!config.quiet) console.log('* started http://' + config.host + ':' + config.port + '/')
 })
 
-var tail
+/*var tail
 if (~spawnArgs.indexOf('-f')) {
   if (!config.quiet) console.log('* tailing:', spawnArgs[spawnArgs.indexOf('-f') + 1])
   tail = spawn('tail', spawnArgs).stdout
@@ -78,3 +93,46 @@ tail.on('data', function (data) {
     return ''
   })
 })
+*/
+var mysql = require('mysql');
+
+(function getOnlineIp ()
+{
+	var conn = mysql.createConnection({
+		host: config.mysql_host,
+		user: config.mysql_username,
+		password: config.mysql_password,
+		database: config.mysql_database,
+		port: config.mysql_port
+	});
+    conn.connect();
+	conn.query("select `ip`,`nodeid` from `alive_ip` where `datetime`>UNIX_TIMESTAMP()-10", function (err, rows) {
+		if (err) console.log(err);
+		for (var i in rows) {
+			conn.query("select `name` from `ss_node` where `id`=" + rows[i]['nodeid'], function(line){return function (err_node, rows_node) {
+				if (err_node) console.log(err_node);
+				node_name = rows_node[0]['name'];
+				
+				var ips = (
+					line.match(/(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/gm)
+					|| []
+				).filter(function(ip) {
+					return ip
+					.split('.')
+					.filter(function (el) { return el < 10 })
+					.length < 3
+				})
+				if (ips.length) {
+					ips.forEach(function (ip) {
+						ip_child = ip.split('.');
+						maptail.emit('ip', ip, ip_child[0] + "." + ip_child[1] + ".*.*" + "-" + node_name)
+				  })
+				} else {
+					maptail.emit('ip', null, node_name)
+				}
+			}}(rows[i]['ip']));
+		}
+	});
+	setTimeout(getOnlineIp, 10000);
+}());
+
