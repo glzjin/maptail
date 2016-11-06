@@ -95,44 +95,55 @@ tail.on('data', function (data) {
 })
 */
 var mysql = require('mysql');
+    
+var pool = mysql.createPool(
+    {
+        host: config.mysql_host,
+        user: config.mysql_username,
+        password: config.mysql_password,
+        database: config.mysql_database,
+        port: config.mysql_port,
+        connectionLimit: 2
+    }
+);
 
 (function getOnlineIp ()
 {
-	var conn = mysql.createConnection({
-		host: config.mysql_host,
-		user: config.mysql_username,
-		password: config.mysql_password,
-		database: config.mysql_database,
-		port: config.mysql_port
-	});
-    conn.connect();
-	conn.query("select `ip`,`nodeid` from `blockip` where `datetime`>UNIX_TIMESTAMP()-10", function (err, rows) {
-		if (err) console.log(err);
-		for (var i in rows) {
-			conn.query("select `name` from `ss_node` where `id`=" + rows[i]['nodeid'], function(line){return function (err_node, rows_node) {
-				if (err_node) console.log(err_node);
-				node_name = rows_node[0]['name'];
-				
-				var ips = (
-					line.match(/(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/gm)
-					|| []
-				).filter(function(ip) {
-					return ip
-					.split('.')
-					.filter(function (el) { return el < 10 })
-					.length < 3
-				})
-				if (ips.length) {
-					ips.forEach(function (ip) {
-						ip_child = ip.split('.');
-						maptail.emit('ip', ip, ip_child[0] + "." + ip_child[1] + ".*.*" + "-" + node_name)
-				  })
-				} else {
-					maptail.emit('ip', null, node_name)
-				}
-			}}(rows[i]['ip']));
-		}
-	});
-	setTimeout(getOnlineIp, 10000);
+    pool.getConnection(function(err_conn, connection) {
+        if (err_conn) throw err;
+        connection.query("select `ip`,`nodeid` from `blockip` where `datetime`>UNIX_TIMESTAMP()-10", function (err, rows) {
+            if (err) console.log(err);
+            for (var i in rows) {
+                pool.getConnection(function(line){return function(err_conn_2, connection_2) {
+                if (err_conn_2) throw err;
+                    connection_2.query("select `name` from `ss_node` where `id`=" + rows[i]['nodeid'], function(line){return function (err_node, rows_node) {
+                        if (err_node) console.log(err_node);
+                        node_name = rows_node[0]['name'];
+                        
+                        var ips = (
+                            line.match(/(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/gm)
+                            || []
+                        ).filter(function(ip) {
+                            return ip
+                            .split('.')
+                            .filter(function (el) { return el < 10 })
+                            .length < 3
+                        })
+                        if (ips.length) {
+                            ips.forEach(function (ip) {
+                                ip_child = ip.split('.');
+                                maptail.emit('ip', ip, ip_child[0] + "." + ip_child[1] + ".*.*" + "-" + node_name)
+                          })
+                        } else {
+                            maptail.emit('ip', null, node_name)
+                        }
+                        connection_2.release();
+                    }}(line));
+                }}(rows[i]['ip']));
+            }
+            connection.release();
+        });
+    });
+    setTimeout(getOnlineIp, 10000);
 }());
 
